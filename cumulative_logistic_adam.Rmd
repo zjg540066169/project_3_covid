@@ -7,7 +7,9 @@ output: pdf_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-library("tidyverse")
+library(tidyverse)
+library(parallel) # one of the core R packages
+library(doParallel)
 library(foreach)
 library(iterators)
 ```
@@ -131,32 +133,38 @@ data$date[data$date < 0] = 0
 
 data = filter(data, date >= 1)
 parameters = tibble("region_name", "a", "b", "c")
-#
-#for (region in unique(data$`country_region`)) {
-#  region_data = filter(data, data$'country_region' == region)
-  
-#  result = cumu_logit_adam(region_data$date, region_data$confirmed_cases, region_name = region, print_loss = TRUE)
-#  parameters = rbind(parameters, c(region, result[[1]], result[[2]], result[[3]]))
-  #print(d)
-  #break
-#}
 
 
-out <- foreach(i = 1:4, .combine = c) %dopar% {
-    cat('Starting ', i, 'th job.\n', sep = '')
-  region = unique(data$`country_region`)[i]
+### single thread ####
+for (region in unique(data$`country_region`)) {
   region_data = filter(data, data$'country_region' == region)
   
   result = cumu_logit_adam(region_data$date, region_data$confirmed_cases, region_name = region, print_loss = TRUE)
-  #parameters = rbind(parameters, c(region, result[[1]], result[[2]], result[[3]]))
+  parameters = rbind(parameters, c(region, result[[1]], result[[2]], result[[3]]))
   
-  
-    
-    cat('Finishing ', i, 'th job.\n', sep = '')
-    result # this will become part of the out object
 }
-print(out)
 
+
+
+#### parallel #####
+#nCores <- 4  # to set manually
+#registerDoParallel(nCores) 
+
+#out <- foreach(i = 1:length(unique(data$`country_region`)), .combine = rbind) %dopar% {
+#  cat('Starting ', i, 'th job.\n', sep = '')
+#  region = unique(data$`country_region`)[i]
+#  region_data = filter(data, data$'country_region' == region)
+  
+#  result = cumu_logit_adam(region_data$date, region_data$confirmed_cases, region_name = region, print_loss = FALSE)
+#  result$region_name = region
+#  cat('Finishing ', i, 'th job.\n', sep = '')
+#  result # this will become part of the out object
+#}
+#parameters = out
+
+
+
+# draw graph
 a = result[[1]]
 b = result[[2]]
 c_ = result[[3]]
