@@ -138,8 +138,8 @@ parameters = tibble("region_name", "a", "b", "c")
 
 ### single thread ####
 for (region in unique(data$`country_region`)) {
-  if (region == "China")
-    next
+  #if (region == "China")
+  #  next
   region_data = filter(data, data$'country_region' == region)
   
   result = cumu_logit_adam(region_data$date, region_data$confirmed_cases, region_name = region, print_loss = TRUE)
@@ -172,5 +172,5 @@ parameters = parameters[-1,]
 a = result[[1]]
 b = result[[2]]
 c_ = result[[3]]
-plot(seq(1, 100), a / (1 + exp(-b * (seq(1, 100) - c_))))
+plot(seq(-1, 100), a / (1 + exp(-b * (seq(-1, 100) - c_))))
 ```
