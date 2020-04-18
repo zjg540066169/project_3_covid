@@ -44,9 +44,10 @@ cumu_logit_adam = function(t, y, parameters = NULL, epoch = NULL, learning_rate 
     
     # gradient calculation
     loss_gradient = 2 * (output - y) / length(y)
-    a_gradient = sum(loss_gradient * (1 / (1 + exp(-b * (t - c)))))
-    b_gradient = sum(loss_gradient * (a * exp(-b * (t - c)) * (t - c) / ((1 + exp(-b * (t - c))) ^ 2))) 
-    c_gradient = sum(loss_gradient * (-a * exp(-b * (t - c)) * b / ((1 + exp(-b * (t - c))) ^ 2))) 
+    e = exp(-b * (t - c))
+    a_gradient = sum(loss_gradient * (1 / (1 + e)))
+    b_gradient = sum(loss_gradient * (a * e * (t - c) / ((1 + e) ^ 2))) 
+    c_gradient = sum(loss_gradient * (-a * e * b / ((1 + e) ^ 2))) 
     
     # momentum udate
     a_momentum = momentum_decay * a_momentum + (1 - momentum_decay) * a_gradient
@@ -137,6 +138,8 @@ parameters = tibble("region_name", "a", "b", "c")
 
 ### single thread ####
 for (region in unique(data$`country_region`)) {
+  if (region == "China")
+    next
   region_data = filter(data, data$'country_region' == region)
   
   result = cumu_logit_adam(region_data$date, region_data$confirmed_cases, region_name = region, print_loss = TRUE)
@@ -144,6 +147,7 @@ for (region in unique(data$`country_region`)) {
   
 }
 
+parameters = parameters[-1,]
 
 
 #### parallel #####
