@@ -132,7 +132,7 @@ data =
 
 data$date[data$date < 0] = 0
 
-data = filter(data, date >= 1)
+data = distinct(data)
 parameters = tibble("region_name", "a", "b", "c")
 
 
