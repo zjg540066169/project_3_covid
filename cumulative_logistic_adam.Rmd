@@ -52,7 +52,7 @@ cumu_logit_adam = function(t, y, parameters = NULL, epoch = NULL, learning_rate 
     # momentum udate
     a_momentum = momentum_decay * a_momentum + (1 - momentum_decay) * a_gradient
     # adaGrad update
-    a_ada = ada_decay * a_ada + (1 - ada_decay) * a_gradient^2
+    a_ada = max(a_ada, ada_decay * a_ada + (1 - ada_decay) * a_gradient^2)
     # parameter update
     a = a - (a_momentum  / (sqrt(a_ada) + tol)) * learning_rate 
     
@@ -60,7 +60,7 @@ cumu_logit_adam = function(t, y, parameters = NULL, epoch = NULL, learning_rate 
     # momentum udate
     b_momentum = momentum_decay * b_momentum + (1 - momentum_decay) * b_gradient
     # adaGrad update
-    b_ada = ada_decay * b_ada + (1 - ada_decay) * b_gradient^2
+    b_ada = max(b_ada, ada_decay * b_ada + (1 - ada_decay) * b_gradient^2)
     # parameter update
     b = b - (b_momentum  / (sqrt(b_ada) + tol)) * learning_rate 
     
@@ -69,7 +69,7 @@ cumu_logit_adam = function(t, y, parameters = NULL, epoch = NULL, learning_rate 
     # momentum udate
     c_momentum = momentum_decay * c_momentum + (1 - momentum_decay) * c_gradient
     # adaGrad update
-    c_ada = ada_decay * c_ada + (1 - ada_decay) * c_gradient^2
+    c_ada = max(c_ada, ada_decay * c_ada + (1 - ada_decay) * c_gradient^2)
     # parameter update
     c = c - (c_momentum / (sqrt(c_ada) + tol)) * learning_rate 
    
@@ -144,7 +144,7 @@ for (region in unique(data$`country_region`)) {
   
   result = cumu_logit_adam(region_data$date, region_data$confirmed_cases, region_name = region, print_loss = TRUE)
   parameters = rbind(parameters, c(region, result[[1]], result[[2]], result[[3]]))
-  
+  break
 }
 
 parameters = parameters[-1,]
@@ -172,5 +172,5 @@ parameters = parameters[-1,]
 a = result[[1]]
 b = result[[2]]
 c_ = result[[3]]
-plot(seq(-1, 100), a / (1 + exp(-b * (seq(-1, 100) - c_))))
+plot(seq(-1, 56), a / (1 + exp(-b * (seq(-1, 56) - c_))))
 ```
