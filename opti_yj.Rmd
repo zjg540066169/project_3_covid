@@ -1,0 +1,120 @@
+---
+title: "optimization_yj"
+author: "YucongJiang"
+date: "2020-4-17"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(caret)
+library(glmnet)
+library(MLmetrics)
+```
+
+```{r, warning=FALSE,message=FALSE}
+LogitStuff <- function(t, n, cur){
+  a <- cur[1]
+  b <- cur[2]
+  c <- cur[3]
+  mse <- sum((a/(1+exp(b*c-b*t))-n)^2)
+  da <- 2*(a/(1+exp(b*c-b*t))-n)/(1+exp(b*c-b*t))
+  db <- -2*a*(t-c)*exp((t-c)*b)*((n-a)*exp((t-c)*b)+n)/(exp((t-c)*b)+1)^3
+  dc <- 2*a*b*exp((t-c)*b)*((n-a)*exp((t-c)*b)+n)/(exp((t-c)*b)+1)^3
+  grad <- c(sum(da),sum(db),sum(dc))
+  daa <- 2/(1+exp((c-t)*b))^2
+  dab <- -2*(t-c)*exp((t-c)*b)*((n-2*a)*exp((t-c)*b)+n)/(exp((t-c)*b)+1)^3
+  dac <- 2*b*exp((t-c)*b)*((n-2*a)*exp((t-c)*b)+n)/(exp((t-c)*b)+1)^3
+  dbb <- 2*a*(t-c)^2*exp((t-c)*b)*((n-a)*exp(2*(t-c)*b)+2*a*exp((t-c)*b)-n)/(exp((t-c)*b)+1)^4
+  dbc <- 2*a*exp((t-c)*b)*(((b*n-a*b)*c+(a*b-b*n)*t+n-a)*exp(2*(t-c)*b)+(2*a*b*c-2*a*b*t+2*n-a)*exp((t-c)*b)-b*n*c+b*n*t+n)/(exp((t-c)*b)+1)^4
+  dcc <- 2*a*b^2*exp((t-c)*b)*((n-a)*exp(2*(t-c)*b)+2*a*exp((t-c)*b)-n)/(exp((t-c)*b)+1)^4
+  Hess <- matrix(c(sum(daa),sum(dab),sum(dac),sum(dab),sum(dbb),sum(dbc),sum(dac),sum(dbc),sum(dcc)),ncol = 3)
+  return(list(mse=mse,grad=grad,Hess=Hess))
+}
+
+NewtonRaphson <- function(x, y, func, cur, tol=1e-10,
+                          maxiter = 200) {
+  i <- 0
+  stuff <- func(x, y, cur)
+  res <- c(0, stuff$mse, cur)
+  prevmse <- Inf # To make sure it iterates
+  while(i < maxiter & abs(stuff$mse - prevmse) > tol){
+    i <- i + 1
+    prevmse <- stuff$mse
+    prev <- cur
+    lambda <- 2
+    while (stuff$mse>=prevmse & lambda>1e-5){
+      lambda <- lambda/2
+      cur <- prev - lambda * (solve(stuff$Hess) %*% stuff$grad)
+      stuff <- func(x, y, cur) # log-lik, gradient, Hessian
+    }
+    if (stuff$mse>=prevmse){
+      new_Hess <- stuff$Hess-2*max(stuff$Hess)*matrix(c(1,0,0,0,1,0,0,0,1),ncol=3)
+      prevmse <- stuff$mse
+      prev <- cur
+      lambda <- 2
+      while (stuff$mse>=prevmse & lambda>1e-5){
+        lambda <- lambda/2
+        cur <- prev - lambda * (solve(stuff$Hess) %*% stuff$grad)
+        stuff <- func(x, y, cur) # log-lik, gradient, Hessian
+      }
+    }
+    res <- rbind(res, c(i, stuff$mse, cur))
+    # Add current values to results matrix
+  }
+  return(res)
+}
+
+
+
+
+
+data <- read_csv("covid19-1.csv")
+
+data <- data.frame(data) %>% 
+  select(Province.State,Country.Region,Date,ConfirmedCases) %>% 
+  filter(ConfirmedCases!=0) %>%
+  mutate(Country.Region=factor(Country.Region))
+
+regions <- levels(data$Country.Region)
+
+new_data <- tibble()
+for (i in regions){
+  data_region <- data
+  data_region <- data_region %>% filter(Country.Region==i) %>% mutate(Province.State=factor(Province.State))
+  province <- levels(data_region$Province.State)
+  if (length(province)==0){
+    new_data <- rbind(new_data,tibble(Province="NA",Country=i,Case=list(data_region$ConfirmedCases)))
+  }
+  else{
+    for (j in province){
+      data_province <- data_region %>% filter(Province.State==j)
+      new_data <- rbind(new_data,tibble(Province=j,Country=i,Case=list(data_province$ConfirmedCases)))
+    }
+  }
+  
+}
+
+for (i in 1:nrow(new_data)){
+  y=new_data$Case[[i]]
+  x=1:length(y)
+  
+}
+
+n=new_data$Case[[70]]
+t=1:length(n)
+stuff <- LogitStuff(t,n,c(4,1,2))
+
+res <- NewtonRaphson(t,n,LogitStuff,c(1,1,1))
+```
+
+```{r, warning=FALSE,message=FALSE}
+
+
+```
+
+```{r, warning=FALSE,message=FALSE}
+
+
+```
