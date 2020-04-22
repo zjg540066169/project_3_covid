@@ -44,14 +44,15 @@ cumu_logit_adam = function(t, y, parameters = NULL, epoch = NULL, learning_rate 
     
     # gradient calculation
     loss_gradient = 2 * (output - y) / length(y)
-    a_gradient = sum(loss_gradient * (1 / (1 + exp(-b * (t - c)))))
-    b_gradient = sum(loss_gradient * (a * exp(-b * (t - c)) * (t - c) / ((1 + exp(-b * (t - c))) ^ 2))) 
-    c_gradient = sum(loss_gradient * (-a * exp(-b * (t - c)) * b / ((1 + exp(-b * (t - c))) ^ 2))) 
+    e = exp(-b * (t - c))
+    a_gradient = sum(loss_gradient * (1 / (1 + e)))
+    b_gradient = sum(loss_gradient * (a * e * (t - c) / ((1 + e) ^ 2))) 
+    c_gradient = sum(loss_gradient * (-a * e * b / ((1 + e) ^ 2))) 
     
     # momentum udate
     a_momentum = momentum_decay * a_momentum + (1 - momentum_decay) * a_gradient
     # adaGrad update
-    a_ada = ada_decay * a_ada + (1 - ada_decay) * a_gradient^2
+    a_ada = max(a_ada, ada_decay * a_ada + (1 - ada_decay) * a_gradient^2)
     # parameter update
     a = a - (a_momentum  / (sqrt(a_ada) + tol)) * learning_rate 
     
@@ -59,7 +60,7 @@ cumu_logit_adam = function(t, y, parameters = NULL, epoch = NULL, learning_rate 
     # momentum udate
     b_momentum = momentum_decay * b_momentum + (1 - momentum_decay) * b_gradient
     # adaGrad update
-    b_ada = ada_decay * b_ada + (1 - ada_decay) * b_gradient^2
+    b_ada = max(b_ada, ada_decay * b_ada + (1 - ada_decay) * b_gradient^2)
     # parameter update
     b = b - (b_momentum  / (sqrt(b_ada) + tol)) * learning_rate 
     
@@ -68,7 +69,7 @@ cumu_logit_adam = function(t, y, parameters = NULL, epoch = NULL, learning_rate 
     # momentum udate
     c_momentum = momentum_decay * c_momentum + (1 - momentum_decay) * c_gradient
     # adaGrad update
-    c_ada = ada_decay * c_ada + (1 - ada_decay) * c_gradient^2
+    c_ada = max(c_ada, ada_decay * c_ada + (1 - ada_decay) * c_gradient^2)
     # parameter update
     c = c - (c_momentum / (sqrt(c_ada) + tol)) * learning_rate 
    
@@ -131,19 +132,22 @@ data =
 
 data$date[data$date < 0] = 0
 
-data = filter(data, date >= 1)
+data = distinct(data)
 parameters = tibble("region_name", "a", "b", "c")
 
 
 ### single thread ####
 for (region in unique(data$`country_region`)) {
+  #if (region == "China")
+  #  next
   region_data = filter(data, data$'country_region' == region)
   
   result = cumu_logit_adam(region_data$date, region_data$confirmed_cases, region_name = region, print_loss = TRUE)
   parameters = rbind(parameters, c(region, result[[1]], result[[2]], result[[3]]))
-  
+  break
 }
 
+parameters = parameters[-1,]
 
 
 #### parallel #####
@@ -168,5 +172,5 @@ for (region in unique(data$`country_region`)) {
 a = result[[1]]
 b = result[[2]]
 c_ = result[[3]]
-plot(seq(1, 100), a / (1 + exp(-b * (seq(1, 100) - c_))))
+plot(seq(-1, 56), a / (1 + exp(-b * (seq(-1, 56) - c_))))
 ```
