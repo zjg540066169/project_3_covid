@@ -20,7 +20,7 @@ library(iterators)
 ```{r}
 # Use adam optimizer to optimize the mse loss
 
-cumu_logit_adam = function(t, y, parameters = NULL, epoch = NULL, learning_rate = 1e-3, momentum_decay = 0.9, ada_decay = 0.999, tol = 1e-4, print_loss = FALSE, region_name = NULL){
+cumu_logit_adam = function(t, y, parameters = NULL, epoch = NULL, learning_rate = 1e-2, momentum_decay = 0.9, ada_decay = 0.999, tol = 1e-4, print_loss = FALSE, region_name = NULL){
   if (is.null(parameters)) {
      parameters = c(0, 0,0)
   }
@@ -82,7 +82,7 @@ cumu_logit_adam = function(t, y, parameters = NULL, epoch = NULL, learning_rate 
       print(paste(region_name, " ", step, "steps :", new_loss)) 
     
     # some condition to finish optimization
-    if (is.null(new_loss))
+    if (is.null(new_loss) || is.na(new_loss))
       break
     if (abs(new_loss - old_loss) < tol || new_loss < tol)
       break
@@ -138,13 +138,13 @@ parameters = tibble("region_name", "a", "b", "c")
 
 ### single thread ####
 for (region in unique(data$`country_region`)) {
-  #if (region == "China")
+  #if (region != "China")
   #  next
   region_data = filter(data, data$'country_region' == region)
   
   result = cumu_logit_adam(region_data$date, region_data$confirmed_cases, region_name = region, print_loss = TRUE)
   parameters = rbind(parameters, c(region, result[[1]], result[[2]], result[[3]]))
-  break
+  #break
 }
 
 parameters = parameters[-1,]
