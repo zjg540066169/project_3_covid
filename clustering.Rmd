@@ -1,0 +1,175 @@
+---
+title: "KMeans"
+author: "Jungang Zou"
+date: "4/22/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(parallel) # one of the core R packages
+library(doParallel)
+library(foreach)
+library(iterators)
+library(mvtnorm)
+library(onehot)
+nCores <- 4  # to set manually
+registerDoParallel(nCores) 
+
+set.seed(1)
+n_kmeans = 10 # number of clusters in k_means
+data_scale = T # whether to standardize data in kmeans
+
+n_gm = 5 # number of clusters in gaussian mixture
+```
+
+## KMeans
+
+```{r}
+find_close_core <- function(x, core){
+  which.min(sqrt(rowSums((x - core)^2)))
+}
+
+
+kmeans <- function(x, k = 4, scale = T){
+  x = as.matrix(x)
+  if (scale)
+    x = scale(x)
+  core = as.matrix(sample_n(as.data.frame(x), k, replace = T))
+  cluster <- foreach(i = 1:nrow(x), .combine = c) %dopar% {
+          cat('Starting ', i, 'th job.\n', sep = '')
+          outSub <- find_close_core(x[i, ], core)
+          cat('Finishing ', i, 'th job.\n', sep = '')
+          outSub # this will become part of the out object
+      }
+  result = cluster
+  step = 1
+  while (T) {
+    loss = 0
+    for (i in 1:k) {
+        if (length(x[cluster == i, ]) == 0)
+          next
+        if (length(x[cluster == i, ]) == ncol(x))
+          core[i, ] = x[cluster == i, ]
+        else {
+          core[i, ] = colMeans(x[cluster == i, ])
+          loss = loss + sum(sqrt(rowSums((x[cluster == i, ] - core[i, ])^2)))
+        }
+      }
+      print(paste("step ", step, "    ", loss))
+      
+      cluster <- foreach(i = 1:nrow(x), .combine = c) %dopar% {
+          cat('Starting ', i, 'th job.\n', sep = '')
+          outSub <- find_close_core(x[i, ], core)
+          cat('Finishing ', i, 'th job.\n', sep = '')
+          outSub # this will become part of the out object
+      }
+      
+      if (sum((cluster - result)^2) == 0) {
+        break
+      }
+      step = step + 1
+      result = cluster
+  }
+  return(cbind(x, result))
+}
+
+
+
+```
+
+```{r}
+
+data = read_csv("cumulative_region.csv")
+core = kmeans(select(data, a, b, c), n_kmeans, data_scale)
+data = mutate(data, kmeans = core[, 4])
+
+
+
+df = as.data.frame(core) %>% mutate(result = as.factor(result))
+ggplot(df, aes(x = a, y = b)) + geom_point(aes(color = result))
+```
+
+
+
+## Gaussian Mixture
+
+```{r}
+
+
+
+gaussian_mixture <- function(x, k = 10, tol = 1e-3){
+  x = as.matrix(x)
+  
+  # probability for each gaussian distribution
+  probability = rep(1 / k, k)
+  
+  # the probability of each sample related to each gaussian distribution
+  cluster = matrix(rep(1 / k , k * nrow(x)), nrow = nrow(x))
+  
+  
+  
+  #outlier list
+  outlier = c()
+  
+  
+  # mean vector and covariance matrix for each gaussian distribution
+  mu_list = as.matrix(sample_n(as.data.frame(x), k))
+  cov_list = list() 
+  # calculate loss
+  old_loss = 0
+  for (i in 1:k) {
+    cov_list[[i]] = diag(ncol(x)) * max(x)
+    old_loss = old_loss - sum(cluster[, i]) * log(probability[i]) + sum(cluster[, i] * dmvnorm(x, mean = mu_list[i, ], sigma = cov_list[[i]], log = T))
+  }
+  
+  
+  step = 1
+  
+  while (T) {
+    
+    # E-step
+    for (i in 1:k) {
+      cluster[, i] = probability[i] * dmvnorm(x, mean = mu_list[i, ], sigma = cov_list[[i]])
+    }
+    
+    cluster = cluster / (rowSums(cluster))
+    outlier = unique(c(outlier, as.vector(which(is.na(cluster), arr.ind=TRUE)[, 1])))
+    
+    
+    # M-step
+    for (i in 1:k) {
+      cov_list[[i]] = (t(cluster[-outlier, i] * (x[-outlier, ] - mu_list[i, ]))) %*% (x[-outlier, ] - mu_list[i, ]) / sum(cluster[-outlier, i])
+      mu_list[i, ] = colSums(cluster[-outlier, i] * x[-outlier, ]) / sum(cluster[-outlier, i])
+      probability[i] = sum(cluster[-outlier, i]) / nrow(x[-outlier, ])
+    }
+    
+    
+    # calculate loss
+    new_loss = 0
+    for (i in 1:k) {
+      if(NaN %in% mu_list[i,])
+          next
+      new_loss = new_loss - sum(cluster[-outlier, i]) * log(probability[i]) + sum(cluster[-outlier, i] * dmvnorm(x[-outlier, ], mean = mu_list[i, ], sigma = cov_list[[i]], log = T))
+    }
+    print(paste("step ", step, "    ", new_loss))
+    
+    # condition to break
+    if(!is.na(new_loss)){
+      if(abs(old_loss - new_loss) < tol)
+        break
+      old_loss = new_loss
+    }
+    step = step + 1
+    
+  }
+  cluster_result = apply(cluster, 1, which.max)
+  return(list(cluster_result = cluster_result, outlier = outlier, mu = mu_list, sigma = cov_list))
+}
+
+data = read_csv("cumulative_region.csv")
+x = as.matrix(select(data, a, b, c))
+core = gaussian_mixture(select(data, a, b, c), n_gm)
+core
+```
