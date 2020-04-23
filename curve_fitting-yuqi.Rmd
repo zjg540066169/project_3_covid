@@ -1,0 +1,286 @@
+---
+title: "logistic curve fit"
+author: "Yuqi Miao ym2771"
+date: "4/18/2020"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+```
+
+# data cleaning
+
+```{r}
+data_original = read.csv("covid19-1.csv") %>% janitor::clean_names()
+data_all = data_original %>% 
+  mutate(date = as.numeric(as.Date.character(date, format = "%m/%d/%y"))) %>% 
+  group_by(country_region, date) %>% 
+  summarise(region_confirmed = sum(confirmed_cases)) %>% 
+  ungroup(date) %>%
+  filter(region_confirmed!=0) %>% 
+  mutate(t_cum = date - min(date)+1) %>% 
+  dplyr::select(country_region,t_cum,region_confirmed) 
+  
+#data_all = data_original %>% 
+#  select(country_region,province_state,date,confirmed_cases) %>%
+#  group_by(country_region,province_state) %>% 
+#  mutate(t = seq_along(province_state)) %>% 
+#  group_by(country_region,province_state,date) %>% 
+#  mutate(region_confirmed = sum(confirmed_cases)) %>% 
+#  ungroup() %>% 
+#  select(country_region,t,region_confirmed) 
+
+```
+
+
+```{r}
+# input data in every region
+curve_fitting = function(data,tol = 1e-10, max = 2000,vec_start){
+  i = 0
+  y = data[3]
+  t = data[2]
+  a = vec_start[1]
+  b = vec_start[2]
+  c = vec_start[3]
+  x = exp(-b*(t-c))
+  y_hat = a/(1+x)
+  ## gradient
+  a_gradient = 2*sum((y_hat-y)/(1+x))
+  b_gradient = 2*sum(((y_hat-y)*a*x*(c-t))/(1+x)^2)
+  c_gradient = 2*sum(((y_hat-y)*a*x*b)/(1+x)^2)
+  h = diag(-0.01,3,3)
+  l_gradient = as.matrix(c(a_gradient,b_gradient,c_gradient))
+  sse_n= sum((y-y_hat)^2)
+  sse_p = Inf
+  vec_p = vec_start
+  step = 1
+  res = c(i = i, a = a, b = b, c = c, sse = sse_n, step = step)
+  while(abs(sse_p-sse_n)>tol & i<= max){
+    i = i+1
+    step = 1
+    vec_n = vec_p + step*h%*%l_gradient
+    a = vec_n[1]
+    b = vec_n[2]
+    c = vec_n[3]
+    x = exp(-b*(t-c))
+    y_hat = a/(1+x)
+    ## gradient
+    a_gradient = 2*sum((y_hat-y)/(1+x))
+    b_gradient = 2*sum(((y_hat-y)*a*x*(c-t))/(1+x)^2)
+    c_gradient = 2*sum(((y_hat-y)*a*x*b)/(1+x)^2)
+    #h = diag(1,3,3)
+    l_gradient = as.matrix(c(a_gradient,b_gradient,c_gradient))
+    sse_p = sse_n
+    sse_n = sum((y-y_hat)^2)
+    while(sse_n>sse_p){
+      step = step/2
+      vec_p = vec_n
+      vec_n = vec_p + step*h%*%l_gradient
+      a = vec_n[1]
+      b = vec_n[2]
+      c = vec_n[3]
+      x = exp(-b*(t-c))
+      y_hat = a/(1+x)
+      ## gradient
+      a_gradient = 2*sum((y_hat-y)/(1+x))
+      b_gradient = 2*sum(((y_hat-y)*a*x*(c-t))/(1+x)^2)
+      c_gradient = 2*sum(((y_hat-y)*a*x*b)/(1+x)^2)
+      #h = diag(1,3,3)
+      l_gradient = as.matrix(c(a_gradient,b_gradient,c_gradient))
+      sse_p = sse_n
+      sse_n = sum((y-y_hat)^2)
+    }
+    vec_p = vec_n
+    res = rbind(res, c(i = i, a = a, b = b, c = c, sse = sse_n, step = step))
+    if(is.nan(sse_n)){
+      print(res)
+      break
+    }
+  }
+ return(res)                     
+}
+data = data_all %>% filter(country_region == "China")
+max_case = max(data$region_confirmed)
+curve_fitting(data, tol = 0.01,vec_start = c(10000,0.1,30))
+```
+
+
+## not converge？
+
+```{r,echo= F}
+curve_fitting2 = function(data,tol = 1e-10, max = 2000,vec_start){
+  i = 0
+  y = data[3]
+  t = data[2]
+  a = vec_start[1]
+  b = vec_start[2]
+  c = vec_start[3]
+  x = exp(-b*(t-c))
+  y_hat = a/(1+x)
+  ## gradient
+  a_gradient = -2*sum((y-y_hat)/(1+x))
+  b_gradient = -2*sum(((y-y_hat)*a*x*(t-c))/(1+x)^2)
+  c_gradient = -2*sum(((y-y_hat)*a*x*-b)/(1+x)^2)
+  h = diag(1,3,3)
+  gradient_cur = as.matrix(c(a_gradient,b_gradient,c_gradient))
+  sse_n= sum((y-y_hat)^2)
+  sse_p = Inf
+  vec_p = vec_start
+  step = 1
+  res = c(i = i, a = a, b = b, c = c, sse = sse_n, step = step)
+  while(i<= max){
+    i = i+1
+    step = 1
+    vec_n = vec_p - step*solve(h)%*%gradient_cur
+    a = vec_n[1]
+    b = vec_n[2]
+    c = vec_n[3]
+    x = exp(-b*(t-c))
+    y_hat = a/(1+x)
+    ## gradient
+    gradient_pre = gradient_cur
+    a_gradient = -2*sum((y-y_hat)/(1+x))
+    b_gradient = -2*sum(((y-y_hat)*a*x*(t-c))/(1+x)^2)
+    c_gradient = -2*sum(((y-y_hat)*a*x*-b)/(1+x)^2)
+    gradient_cur = as.matrix(c(a_gradient,b_gradient,c_gradient))
+    ## SR1 update
+    g = gradient_cur - gradient_pre
+    s = vec_n-vec_p
+    h = h + ((g-h%*%s)%*%t(g-h%*%s))/as.numeric(t(s)%*%(g-h%*%s))
+    sse_p = sse_n
+    sse_n = sum((y-y_hat)^2)
+    while(sse_n>sse_p){
+      step = step/2
+      vec_p = vec_n
+      vec_n = vec_p - step*solve(h)%*%gradient_cur
+      a = vec_n[1]
+      b = vec_n[2]
+      c = vec_n[3]
+      x = exp(-b*(t-c))
+      y_hat = a/(1+x)
+      ## gradient
+      gradient_pre = gradient_cur
+      a_gradient = -2*sum((y-y_hat)/(1+x))
+      b_gradient = -2*sum(((y-y_hat)*a*x*(t-c))/(1+x)^2)
+      c_gradient = -2*sum(((y-y_hat)*a*x*-b)/(1+x)^2)
+      gradient_cur = as.matrix(c(a_gradient,b_gradient,c_gradient))
+      sse_p = sse_n
+      sse_n = sum((y-y_hat)^2)
+    }
+    vec_p = vec_n
+    res = rbind(res, c(i = i, a = a, b = b, c = c, sse = sse_n, step = step))
+    if(is.nan(sse_n)){
+      print("break")
+      break
+    }
+    if(abs(sse_p-sse_n)<=tol){
+      break
+    }
+  }
+ return(res)                     
+}
+data = data_all %>% filter(country_region == "China")
+max_case = max(data$region_confirmed)
+result = curve_fitting2(data, tol = 1e-10,vec_start = c(1000,15,40))
+result
+
+data %>% ggplot(aes(x = t_cum, y = region_confirmed)) + geom_point()
+# very unstable result -> cross validation?
+```
+
+```{r}
+curve_fitting3 = function(data,tol = 1e-10, max = 40,vec_start){
+  i = 0
+  y = data[3]
+  t = data[2]
+  a = vec_start[1]
+  b = vec_start[2]
+  c = vec_start[3]
+  x = exp(-b*(t-c))
+  y_hat = a/(1+x)
+  ## gradient
+  a_gradient = 2*sum((y_hat-y)/(1+x))
+  b_gradient = 2*sum(((y_hat-y)*a*x*(c-t))/(1+x)^2) ## extremely large? why?
+  c_gradient = 2*sum(((y_hat-y)*a*x*b)/(1+x)^2)
+  h = diag(-0.1,3,3)
+  gradient_cur = as.matrix(c(a_gradient,b_gradient,c_gradient))
+  sse_n= sum((y-y_hat)^2)
+  sse_p = Inf
+  vec_p = vec_start
+  step = 1
+  res = c(i = i, a = a, b = b, c = c, sse = sse_n, step = step)
+  while(max(abs(gradient_cur))>tol & i<= max){
+    i = i+1
+    step = 1
+    vec_n = vec_p - step*h%*%gradient_cur
+    a = vec_n[1]
+    b = vec_n[2]
+    c = vec_n[3]
+    x = exp(-b*(t-c)) 
+    y_hat = a/(1+x)
+    sse_p = sse_n
+    sse_n = sum((y-y_hat)^2)
+    ## gradient
+    gradient_pre = gradient_cur
+    a_gradient = 2*sum((y_hat-y)/(1+x))
+    b_gradient = 2*sum(((y_hat-y)*a*x*(c-t))/(1+x)^2)
+    c_gradient = 2*sum(((y_hat-y)*a*x*b)/(1+x)^2)
+    gradient_cur = as.matrix(c(a_gradient,b_gradient,c_gradient))
+    ## BFGS update
+    g = gradient_cur - gradient_pre
+    s = vec_n-vec_p
+    h = -((diag(1,3,3)-(s%*%t(g))/as.numeric(t(g)%*%s)))%*%h%*%((diag(1,3,3)-t(s%*%t(g))/as.numeric(t(g)%*%s)))+(s%*%t(s))/as.numeric(t(g)%*%s)
+    if (sum(eigen(h)$values<0)){
+      max_e = min(eigen(h)$values)
+      h = h-max_e*matrix(1,3,3)
+    }
+    while(sse_n>sse_p){
+      step = step/2
+      vec_p = vec_n
+      vec_n = vec_p - step*h%*%gradient_cur
+      a = vec_n[1]
+      b = vec_n[2]
+      c = vec_n[3]
+      x = exp(-b*(t-c))
+      y_hat = a/(1+x)
+      ## gradient
+      gradient_pre = gradient_cur
+      a_gradient = 2*sum((y_hat-y)/(1+x))
+      b_gradient = 2*sum(((y_hat-y)*a*x*(c-t))/(1+x)^2)
+      c_gradient = 2*sum(((y_hat-y)*a*x*b)/(1+x)^2)
+      gradient_cur = as.matrix(c(a_gradient,b_gradient,c_gradient))
+      sse_p = sse_n
+      sse_n = sum((y-y_hat)^2)
+    }
+    vec_p = vec_n
+    res = rbind(res, c(i = i, a = a, b = b, c = c, sse = sse_n, step = step))
+  }
+ return(res)                     
+}
+data = data_all %>% filter(country_region == "China")
+max_case = max(data$region_confirmed)
+result = curve_fitting3(data, tol = 0.01,vec_start = c(max_case,15,20))
+result
+
+max(gradient_cur)
+##Check the gradient function!!
+## unstable
+```
+
+## R function 
+```{r}
+install.packages("car")
+library(car)
+
+pop.mod1 <- nls(population ~ theta1/(1+exp(-(theta2+theta3*year))),start=list(theta1 = 400, theta2 = -49, theta3 = 0.025), data=USPop, trace=T)
+
+summary(pop.mod1)
+
+data = data_all %>% filter(country_region == "US")
+
+fit1 = nls(region_confirmed ~ theta1/(1+exp(-theta2*(t_cum-theta3))),start=list(theta1 = 1000, theta2 = 15, theta3 = 30), data=data, trace=T)
+summary(fit1)
+```
+
+
