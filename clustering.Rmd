@@ -165,11 +165,13 @@ gaussian_mixture <- function(x, k = 10, tol = 1e-3){
     
   }
   cluster_result = apply(cluster, 1, which.max)
-  return(list(cluster_result = cluster_result, outlier = outlier, mu = mu_list, sigma = cov_list))
+  return(list(cluster_result = unlist(cluster_result, use.names=FALSE), outlier = outlier, mu = mu_list, sigma = cov_list))
 }
 
 data = read_csv("cumulative_region.csv")
 x = as.matrix(select(data, a, b, c))
 core = gaussian_mixture(select(data, a, b, c), n_gm)
-core
+print(core)
+data[core$outlier, ]
+
 ```
