@@ -20,7 +20,7 @@ library(iterators)
 ```{r}
 # Use adam optimizer to optimize the mse loss
 
-cumu_logit_adam = function(t, y, parameters = NULL, epoch = NULL, learning_rate = 1e-2, momentum_decay = 0.9, ada_decay = 0.999, tol = 1e-4, print_loss = FALSE, region_name = NULL){
+cumu_logit_adam = function(t, y, parameters = NULL, epoch = NULL, learning_rate = 1e-3, momentum_decay = 0.9, ada_decay = 0.999, tol = 1e-4, print_loss = FALSE, region_name = NULL){
   if (is.null(parameters)) {
      parameters = c(0, 0,0)
   }
