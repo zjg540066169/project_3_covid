@@ -25,3 +25,7 @@ for (i in 1:nrow(new_test)){
   new_test$mse[i] <- sum((estimate_case-case)^2)
 }
 data.frame(new_test$Country.Region,new_test$mse)
+
+plot(density(log(new_test$mse)))
+
+     
