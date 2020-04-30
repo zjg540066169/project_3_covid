@@ -1,0 +1,97 @@
+---
+title: "method"
+author: "Yuqi Miao ym2771"
+date: "4/28/2020"
+output: html_document
+---
+
+# 1 curve fitting
+
+We use logistic curve to fit the data in every region, with the function form: 
+
+$$f(t) = \frac{a}{1+exp(-b(t-c))}$$
+where $t$ indicates the days since the first COVID-19 case was tested out. Our goal here is to minimize the quadratic loss function
+
+$$\underset{a,b,c} {min}\frac{1}{n_r}\sum_{i = 1}^{n_r}(f(t_i)-y_i)^2$$
+
+where $n_r$ indicates the total days since the first COVID-19 case in $r_{th}$ region, and $y_i$ is the accumulative number of confirmed cases. 
+
+In order to fit the curve, we build the Adam optimization algrithm. Instead of using the descent gradient direction and constant learning rate, Adam uses first and second momentum to accumulate all gradient and penalize information during the iteration.
+
+In every step, using $\nabla\theta_t$ to denote the gradient direction for current step. To get new moving direction $v_t$, we introduce a fraction coefficient $\rho$ indicating the proportion of influential information that remained from former iteration, specifically:
+$$v_t = \rho(v_{t-1})+(1-\rho)\nabla\theta_t$$
+
+In the standardized gradient descent method, the learning rate is directly linked to the absolute value of gradient, which may cause dramatic oscillation of the learning path. Thus, Adam uses the accumulated squared gradient to penalize on learning rate for every step. To avoid penalizing too much in later steps, we also incorporate a decay coefficient $d$ to indicate the pernalize information from former steps, specifically: 
+$$s_t = ds_{t-1}+(1-d)\nabla\theta_i^T\nabla\theta_i$$
+
+Combine the above 2 components, the new step taken as:
+$$\theta_{t+1} = \theta_t -\alpha\frac{v_t}{s_t}$$
+
+where $\alpha$ is the pre-defined learning step length.
+
+# 2 cluster methods
+
+Two cluster methods are applicate on the parameters optimized the curve in each region.  
+
+## 2.1 K-means cluster
+
+To cluster the parameters using K-means model, one should minimize the target function comes to:
+
+$$J(\mu, r) = \sum_{i = 1}^n\sum_{j = 1}^k r_{ij} ||\boldsymbol{\theta_i-\mu_j}||^2$$
+where $\boldsymbol {\theta_i} = (a_i,b_i,c_i)^T$, and $\boldsymbol{\mu_j} = (\mu_{aj},\mu_{bj},\mu_{cj})^T$ is the centroid for cluster j, and $r_{ij}$ is the indicator variable indicating whether the $i_{th}$ case is in the $j_{th}$ cluster.
+
+To get the optimization outcome, 2  steps should  be taken for every iteration:
+
+Firstly, use the centroid from last step to re-assign the cases:
+
+$$r_{ij}^{(t+1)} = I\{j = \underset{j}{argmin} ||\boldsymbol{\theta_i-\mu_j}^{(t)}||^2\}$$
+
+Secondly, use the newly assigned points to recalculate centroids:
+
+$$\mu_{j} = \frac{\sum_{i=1}^nr_{ij}\boldsymbol{\theta_{ij}}}{\sum_{i = 1}^{n}r_{ij}}$$
+
+## 2.2 gaussian matrix model
+
+we assume the parameters follows a mixture multi-variate normal distribution with k clusters, with the following form:
+
+$$\boldsymbol {\theta_i}\sim\left\{\begin{array}{lc}MVN(\boldsymbol {\theta_i,\mu_1,\Sigma_1})&with\;p_1\\...&...\\MVN(\boldsymbol {\theta_i,\mu_k,\Sigma_k})&with\;p_k\end{array}\right.$$
+$$MVN(\boldsymbol {\theta_i,\mu_j,\Sigma_j}) = \frac{exp[-\frac{1}{2}(\boldsymbol {\theta_i - \mu_j})^T\Sigma^{-1}(\boldsymbol {\theta_i - \mu_j})]}{(2\pi|\Sigma|)^{\frac{1}{2}}}$$
+
+where $\boldsymbol \theta_i =(a_i,b_i,c_i)^T$ is the parameters of fitted curves in $region_i$; $\mu_k,\Sigma_k$ indicates the mean and covariance matrix for the $j_{th}$ multivariate normal distribution. To construct a additive loglikelihood function, latent variables $z_{ij} = I\{parameters \;for\;i_{th} \;region\;curve\;is \;in\;j_{th}\;cluster\}$ was introduced to the model with the constraints of $\sum_{j=1}^kz_{ij}=1$ and define $\sum_{i=1}^nz_{ij}=n_j$ which indicates the number of curves in the $j_th$ cluster.
+
+After incorporating the indicator variable, the loglikelihood can be formed as follow:
+
+$$l(\boldsymbol {\theta,z,\mu,\Sigma}) = \sum_{i=1}^n\sum_{j=1}^kz_{ij}(log(p_j)+log[MVN(\theta_i,\mu_j,\Sigma_j)]$$
+
+as indicates above, the full loglikelihood is a linear function for indicator variable $z$, which means that its expectation over $z$ is also a linear combination of expectation of $z$ itself.
+
+Thus, for E step
+
+$$\delta_{ij} = E[z_{ij}|\boldsymbol{ \theta_i}, \mu_j^{(t)},\Sigma_j^{(t)}] = p(z_{ij}=1|\boldsymbol{ \theta_i}, \mu_j^{(t)},\Sigma_j^{(t)}) = \frac{p_j^{(t)}f_j(\boldsymbol{ \theta_i}, \mu_j^{(t)},\Sigma_j^{(t)})}{\sum_{j=1}^kp_j^{(t)}f_j(\boldsymbol{ \theta_i}, \mu_j^{(t)},\Sigma_j^{(t)})}$$
+
+correspondingly, the conditional expectation for loglikelihood
+
+$$E[l(\boldsymbol {\theta,z,\mu,\Sigma})|\boldsymbol{ \theta_i}, \mu_j^{(t)},\Sigma_j^{(t)}] = \sum_{i=1}^n\sum_{j=1}^k\delta_{ij}(log(p_j)+log[MVN(\theta_i,\mu_j,\Sigma_j)]$$
+
+
+
+For M step, finding parameters coordinite wisethat maximize the above conditional expectation term with subject of $\sum_{j=1}^k\delta_{ij}=1$ and define $\sum_{i=1}^n\delta_{ij}=m_j$ 
+
+$$p_j^{(t+1)} = \frac{m_j}{n}$$
+
+$$\mu_j^{(t+1)} = \frac{1}{m_k}\sum_{i=1}^n\delta_{ij}\theta_i$$
+
+$$\Sigma_j^{(t+1)} = \frac{1}{m_k}\sum_{i=1}^n\delta_{ij}(\theta_i-\mu_j^{(t+1)})^T(\theta_i-\mu_j^{(t+1)})$$
+
+
+
+
+
+
+
+
+
+
+
+
+
